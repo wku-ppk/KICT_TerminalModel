@@ -1,0 +1,96 @@
+; Shinpoong Station 3D Modelling
+; Constructed by PPK in 2024.6
+
+model new
+model configure dynamic
+model deterministic off
+
+program thread automatic
+
+; import mesh made from Griddle
+zone import 'tunnel.f3grid'
+
+zone cmodel assign mohr-coulomb
+
+
+zone group 'fill' range position-z 73 75.3
+zone group 'sand' range position-z 60 73
+zone group 'ws' range position-z 44 60
+zone group 'wr' range position-z 32 44
+zone group 'III_grade' range position-z 22 32
+zone group 'II_grade' range position-z -10 22
+
+fish define setDynProp(vdensity, vs, vpois, vcohesion, vphi, vtens, vgroup)
+   global gvDensity = vdensity
+   global gvCohesion = vcohesion
+   global gvPhi = vphi
+   global gvTens = vtens
+   global gvShearMod = vdensity*vs^2 
+   global gvBulkMod = (2*gvShearMod*(1+vpois))/(3*(1-2*vpois))
+   global gvGroup = vgroup
+  command
+      zone property density @gvDensity bulk @gvBulkMod shear @gvShearMod cohesion @gvCohesion friction @gvPhi tension @gvTens range group @gvGroup
+  end_command
+   
+end
+; argument order : density, vs, poisson's ratio, cohesion, friction angle(Deg), tension strength, group name(string)
+@setDynProp(1850, 400, 0.25, 1000, 35, 10.0, 'fill')
+@setDynProp(1850, 400, 0.25, 1000, 35, 10.0, 'sand')
+@setDynProp(1900, 550, 0.25, 20000, 37, 1000, 'ws')
+@setDynProp(1950, 650, 0.25, 50000, 38, 10000, 'wr')
+;@setDynProp(2050, 800, 0.25, 100000, 40, 10000, 'V_grade')
+;@setDynProp(2150, 1000, 0.25, 100000, 42, 50000, 'IV_grade')
+@setDynProp(2250, 1200, 0.25, 200000, 42, 50000, 'III_grade')
+@setDynProp(2300, 1500, 0.25, 200000, 42, 100000, 'II_grade')
+
+; Assign BC
+; x = -100 ~ 100, y = 0 ~ 200, z = -10.0
+zone face apply velocity-normal 0.0 range position-x -100.0
+zone face apply velocity-normal 0.0 range position-x 100.0
+zone face apply velocity-normal 0.0 range position-y 0.0
+zone face apply velocity-normal 0.0 range position-y 200.0
+zone face apply velocity-normal 0.0 range position-z -10.0
+
+; assign gravity
+model gravity 0 0 -9.81
+
+;
+model mechanical active on
+model dynamic active off
+model largestrain off
+
+; initial solve
+model solve elastic 
+
+program echo off
+;
+fish define k0_set
+z_pnt=zone.head
+  loop while z_pnt # null
+    zone.stress.xx(z_pnt) = 1.5 * zone.stress.zz(z_pnt)
+    zone.stress.yy(z_pnt) = 1.5 * zone.stress.zz(z_pnt)
+	
+  if zone.group(z_pnt)='fill' then  			; set  fill normally consolidated K0 condition
+;    oo = io.out(z_pnt)
+;    oo = io.out('fill is set')
+    zone.stress.xx(z_pnt) = 0.5 * zone.stress.zz(z_pnt)      ;
+    zone.stress.yy(z_pnt) = 0.5 * zone.stress.zz(z_pnt)
+	end_if
+  if zone.group(z_pnt)='sand' then  			; set  sand normally consolidated K0 condition
+    zone.stress.xx(z_pnt) = 0.5 * zone.stress.zz(z_pnt)      ;
+    zone.stress.yy(z_pnt) = 0.5 * zone.stress.zz(z_pnt)
+	end_if    
+  if zone.group(z_pnt)='ws' then  		     	; set  ws normally consolidated K0 condition
+    zone.stress.xx(z_pnt) = 0.5 * zone.stress.zz(z_pnt)      ;
+    zone.stress.yy(z_pnt) = 0.5 * zone.stress.zz(z_pnt)
+	end_if
+
+    z_pnt=zone.next(z_pnt)
+  end_loop 
+end
+@k0_set
+program echo on
+
+model solve elastic 
+
+model save '[1_N]GenModel.sav'

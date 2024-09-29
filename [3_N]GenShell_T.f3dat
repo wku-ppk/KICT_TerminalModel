@@ -1,0 +1,173 @@
+model new
+model restore '[2_N]ConTunnel3D_T.sav'
+
+zone gridpoint initialize displacement-x 0.0
+zone gridpoint initialize displacement-y 0.0
+zone gridpoint initialize displacement-z 0.0
+
+zone gridpoint initialize velocity-x 0.0
+zone gridpoint initialize velocity-y 0.0
+zone gridpoint initialize velocity-z 0.0
+
+;;
+
+;struct shell create by-zone-face ID 20 range group 'shaft_outside' position-z 6.3 not ; shaft - default shell element is DKC-CST (15 DOFs) : 20
+
+;struct shell create by-zone-face ID 30 range group 'concourseVault' ; : 30
+;struct shell create by-zone-face ID 30 range group 'shaft_outside' position-z 6.3 ; concourseVault : 30
+
+;struct shell create by-zone-face ID 40 range group 'corridor' ; corridor  : 40
+
+;struct shell create by-zone-face ID 50 range group 'emergencyEvacuationTunnel' ; emergencyEvacuationTunnel  : 50
+
+;struct shell create by-zone-face ID 60 range group 'mainTunnelLine' ; mainTunnelLine  : 60
+
+;struct shell create by-zone-face ID 70 range group 'mainPlatformTunnel' ; mainPlatformTunnel  : 70
+;;
+
+;;
+
+;struct liner create by-zone-face ID 20 range group 'shaft_outside' position-z 6.3 not ; shaft - default shell element is DKC-CST (15 DOFs)
+;struct liner create by-zone-face ID 30 range group 'concourseVault' 
+;struct liner create by-zone-face ID 30 range group 'shaft_outside' position-z 6.3 ; concourseVault
+;struct liner create by-zone-face ID 40 range group 'corridor' ; corridor 
+;struct liner create by-zone-face ID 50 range group 'emergencyEvacuationTunnel' ; emergencyEvacuationTunnel
+;struct liner create by-zone-face ID 60 range group 'mainTunnelLine' ; mainTunnelLine
+;struct liner create by-zone-face ID 70 range group 'mainPlatformTunnel' ; mainPlatformTunnel
+;;
+structure node join
+
+;;
+struct shell property density 2300 thickness 0.4 isotropic 20E9 0.2 range id 10 ; top slab of ticket Hall Yong's M 20E9
+struct shell property density 2300 thickness 0.4 isotropic 20E9 0.2 range id 11 ; middle slab of ticket Hall
+struct shell property density 2300 thickness 0.4 isotropic 20E9 0.2 range id 12 ; side slab of ticket Hall
+struct shell property density 2300 thickness 0.4 isotropic 20E9 0.2 range id 13 ; bottom slab of ticket Hall
+
+
+;struct shell property density 2550 thickness 0.8 isotropic 20E9 0.2 range id 20 ; slurry wall shaft thickness (800mm), Young's modulus is approximated as the property of concrete only
+;struct shell property density 2550 thickness 0.8 isotropic 20E9 0.2 range id 30 ; concourseVault lining thickness (800mm), Young's modulus is approximated as the property of concrete only
+;struct shell property density 2550 thickness 0.8 isotropic 20E9 0.2 range id 70 ; mainPlatform lining thickness (800mm), Young's modulus is approximated as the property of concrete only
+
+;struct shell property density 2550 thickness 0.6 isotropic 20E9 0.2 range id 40 ; mainPlatform lining thickness (800mm), Young's modulus is approximated as the property of concrete only
+;struct shell property density 2550 thickness 0.6 isotropic 20E9 0.2 range id 50 ; mainPlatform lining thickness (800mm), Young's modulus is approximated as the property of concrete only
+;struct shell property density 2550 thickness 0.6 isotropic 20E9 0.2 range id 60 ; mainPlatform lining thickness (800mm), Young's modulus is approximated as the property of concrete only
+;;
+
+fish define genColumn(cor_x, cor_y, cor_zb)
+  sPt_top = struct.node.near(cor_x, cor_y, 70.0) ; get nearest shell node corresponds to the input coordinates
+  sPt_mid = struct.node.near(cor_x, cor_y, 62.23) ; 
+  sPt_bot = struct.node.near(cor_x, cor_y, cor_zb) ; 54.46 for ticket hall, 6.4 for concourseVault  
+
+  global top_slab_beamNode_pos = struct.node.pos(sPt_top)  ; get reference position
+
+  global nodeIDmid = struct.node.id.component(sPt_mid) ; get mid slab node id
+  global nodeIDbot = struct.node.id.component(sPt_bot) ; get bot slab node id
+
+; calculate position difference of mid slab
+  global nodePositionDiff_M = top_slab_beamNode_pos - struct.node.pos(sPt_mid) 
+  global nodePositionDiffX_M = nodePositionDiff_M(1)
+  global nodePositionDiffY_M = nodePositionDiff_M(2)
+
+; calculate position difference of not slab
+  global nodePositionDiff_B = top_slab_beamNode_pos - struct.node.pos(sPt_bot) 
+  global nodePositionDiffX_B = nodePositionDiff_B(1)
+  global nodePositionDiffY_B = nodePositionDiff_B(2)
+
+  oo = io.out('      ')
+  oo = io.out('Node IDs')
+  oo = io.out(nodeIDmid)
+  oo = io.out(nodeIDbot)  
+  oo = io.out('      ')  
+
+
+  oo = io.out('      ')
+  oo = io.out('Position Difference')
+  oo = io.out(nodePositionDiff_M)
+  oo = io.out(nodePositionDiff_B)  
+  oo = io.out('      ')  
+
+  oo = io.out('Mid node position')
+  oo = io.out(struct.node.pos(sPt_mid))
+  oo = io.out('Bot node position')
+  oo = io.out(struct.node.pos(sPt_bot))  
+
+
+; node position initialize
+  command
+      structure node initialize position (@nodePositionDiffX_M, @nodePositionDiffY_M, 0.0) add range component-id @nodeIDmid ; mid slab
+      structure node initialize position (@nodePositionDiffX_B, @nodePositionDiffY_B, 0.0) add range component-id @nodeIDbot ; bot slab      
+;      structure node initialize position (1,1, 0.0) add range component-id @nodeIDmid ; mid slab
+;      structure node initialize position (1,1, 0.0) add range component-id @nodeIDbot ; bot slab
+  end_command
+
+  oo = io.out('Mid node position_modified')
+  oo = io.out(struct.node.pos(sPt_mid))
+  oo = io.out('Bot node position_modified')
+  oo = io.out(struct.node.pos(sPt_bot))  
+
+
+
+  global top_slab_beamNode_pos = struct.node.pos(sPt_top)
+  global inter_node_pos_upper  = (struct.node.pos.x(sPt_top), struct.node.pos.y(sPt_top), ((70.0+62.23)/2))  ; intermediate node position (upper)
+
+  global bot_slab_beamNode_pos = struct.node.pos(sPt_bot)
+  global inter_node_pos_lower  = (struct.node.pos.x(sPt_bot), struct.node.pos.y(sPt_bot), ((62.23+cor_zb)/2))  ; intermediate node position (lower)
+
+  command
+      struct beam create by-line @top_slab_beamNode_pos @inter_node_pos_upper id 100
+      struct beam create by-line @bot_slab_beamNode_pos @inter_node_pos_lower id 100      
+  end_command
+
+  global sID_int_upper = struct.node.id.component(struct.node.near(inter_node_pos_upper)) ; find id of new beam node created
+  global sID_int_lower = struct.node.id.component(struct.node.near(inter_node_pos_lower)) ; find id of new beam node created
+;
+  global pos_mid = struct.node.pos(sPt_mid)  
+
+  command
+      struct node create @pos_mid group 'column' 
+  end_command
+  
+  global sID_mid = list.size(struct.node.list) ; node number created at mid slab  
+  
+  command
+      struct beam create by-nodeids @sID_int_upper @sID_mid id 100 
+      struct beam create by-nodeids @sID_int_lower @sID_mid id 100 
+      struct node join
+  end_command
+end
+@genColumn(13.519,141.84,54.46)
+@genColumn(16.5276,147.012,54.46)
+@genColumn(19.4341,152.152,54.46)
+@genColumn(22.3313,157.283,54.46)
+
+@genColumn(21.3831,137.66,54.46)
+@genColumn(24.1989,144.514,54.46)
+@genColumn(29.7595,152.847,54.46)
+
+@genColumn(30.2362,141.468,54.46)
+@genColumn(28.947,136.743,54.46)
+@genColumn(30.4432,130.721,54.46)
+@genColumn(35.9195,128.09,54.46)
+
+@genColumn(41.8396,129.442,54.46)
+@genColumn(45.6223,134.191,54.46)
+@genColumn(45.65,140.18,54.46)
+@genColumn(42.0573,144.872,54.46)
+@genColumn(33.4307,145.72,54.46)
+
+@genColumn(35.0949,150.875,54.46)
+@genColumn(27.6478,127.275,54.46)
+@genColumn(48.6923,144.779,54.46)
+
+;@genColumn(36.3741,137.309,6.30135)
+@genColumn(36.3741,137.309,54.46)
+
+
+
+structure beam property density 2300 young 25732E6 poisson 0.2 cross-sectional-area 0.5027 moi-y 0.0201 moi-z 0.0201 moi-polar 0.0402 direction-y (0, 1, 0) range id 100 ; Circular column with radius of 1 m
+
+model mechanical active on
+model solve
+
+model save '[3_N]GenShell3D_T.sav'
+

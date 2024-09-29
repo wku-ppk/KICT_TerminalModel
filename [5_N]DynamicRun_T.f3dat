@@ -1,0 +1,17 @@
+model new
+model restore '[4_N]DynamicPrep3D_T.sav'
+
+;--- dynamic run
+program thread automatic
+zone dynamic multi-step on
+;model dynamic timestep safety-factor 1.0 ; This is maximum allowed
+model dynamic time-total 0.0
+
+model solve dynamic time-total @goVia1
+model save '[5_N]DynamicRun3D_T_Via1.sav'
+model solve dynamic time-total @goVia2
+model save '[5_N]DynamicRun3D_T_Via2.sav'
+model solve dynamic time-total @goVia3
+model save '[5_N]DynamicRun3D_T_Via3.sav'
+model solve dynamic time-total 15
+model save '[5_N]DynamicRun3D_T_Via4.sav'

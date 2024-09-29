@@ -1,0 +1,8 @@
+#Ignore all sav, temp, backup files
+*.sav
+*.backup
+*.temp
+venv/
+*.bdl
+*.dmp
+*.txt

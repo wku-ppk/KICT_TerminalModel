@@ -1,0 +1,221 @@
+model new
+model restore '[3_N]GenShell3D_T.sav'
+
+zone gridpoint initialize displacement-x 0.0
+zone gridpoint initialize displacement-y 0.0
+zone gridpoint initialize displacement-z 0.0
+
+zone gridpoint initialize velocity-x 0.0
+zone gridpoint initialize velocity-y 0.0
+zone gridpoint initialize velocity-z 0.0
+
+program call 'D-Prep.f3fis'
+
+; set dynamic non-linearity
+zone dynamic damping hysteretic default -3.32872 0.8056 range group 'fill' ; Seed & Idriss Mean Value
+zone dynamic damping hysteretic default -3.32872 0.8056 range group 'sand' ; Seed & Idriss Mean Value
+zone dynamic damping hysteretic sig3 1.026775 -0.59759 -1.12502 range group 'WS' ; Check, from Prof. Choo, KSGE 2001. 10, Vol. 17, No. 5, unit Pa
+zone dynamic damping hysteretic sig3 1.026775 -0.59759 -1.12502 range group 'WR' ; Check, from Prof. Choo, KSGE 2001. 10, Vol. 17, No. 5, unit Pa
+
+model mechanical active on
+model dynamic active off
+model largestrain off
+
+; setup equilibrium
+
+model solve
+
+;--- initialize displacement
+zone gridpoint initialize displacement-x 0.0
+zone gridpoint initialize displacement-y 0.0
+zone gridpoint initialize displacement-z 0.0
+structure node initialize displacement (0.0, 0.0, 0.0)
+;---
+
+;--- Analysis Setting
+model largestrain on
+model mechanical active on
+model dynamic active on
+
+;zone dynamic damping rayleigh 0.01 2.0
+zone dynamic damping combined 0.03141592 ; 1% damping for structures
+structure dynamic damping combined-local 0.03141592 ; 1% damping for structures
+
+;--- Read input motion
+table '100' import 'GyeongJuMKL_EW_FLAC.ACC' ;input motion, Unit in (m/s^2), GyeongJu MKL EW
+table '110' import 'GyeongJuMKL_NS_FLAC.ACC' ;input motion, Unit in (m/s^2), GyeongJu MKL NS
+
+@G_cor(100, 1.0) ; maintain unit m/s^2 and get dt_
+@integrate(100, 200) ; velocity history will be stored to the table 200
+@integrate(110, 210) ; velocity history will be stored to the table 210
+@integrate(200, 300) ; Displacement history will be stored to the table 300
+
+fish define findTableMax(tableNo)
+   tableSize = table.size(tableNo)
+   local valMax = 0.0
+   local indexMax = 0
+   loop local i (1, tableSize)
+     if math.abs(table.y(tableNo, i)) > valMax then
+        valMax = table.y(tableNo, i)
+        indexMax = i     
+     endif
+   endloop
+   oo = io.out(indexMax)
+   oo = io.out(valMax)
+   return indexMax
+end
+[global accMaxIdx = findTableMax(100)]
+[global velMaxIdx = findTableMax(200)]
+[global disMaxIdx = findTableMax(300)]
+
+def sortThreeValues(val1, val2, val3)
+    local sorted = list.create(3, 0.0)
+    if val1 <= val2
+        if val1 <= val3
+            sorted(1) = val1
+            if val2 <= val3
+                sorted(2) = val2
+                sorted(3) = val3
+            else
+                sorted(2) = val3
+                sorted(3) = val2
+            endif
+        else
+            sorted(1) = val3
+            sorted(2) = val1
+            sorted(3) = val2
+        endif
+    else
+        if val2 <= val3
+            sorted(1) = val2
+            if val1 <= val3
+                sorted(2) = val1
+                sorted(3) = val3
+            else
+                sorted(2) = val3
+                sorted(3) = val1
+            endif
+        else
+            sorted(1) = val3
+            sorted(2) = val2
+            sorted(3) = val1
+        endif
+    endif
+    global goVia1 = table.x(100,sorted(1))
+    global goVia2 = table.x(100,sorted(2))
+    global goVia3 = table.x(100,sorted(3))
+end
+[sortThreeValues(accMaxIdx, velMaxIdx, disMaxIdx)]
+
+;--- apply boundary conditions
+zone face apply quiet range position-z -10.0
+
+[global density_of_rock = 2300, vs_of_rock = 1500] ; unit in kg, m, s
+[global constant = density_of_rock * vs_of_rock]
+[global constantV = density_of_rock * vs_of_rock * 1/3]
+;[global constant = 2 * density_of_rock * vs_of_rock]
+zone face apply stress-xz @constant table '200' range position-z -10.0
+zone face apply stress-yz @constant table '210' range position-z -10.0
+zone face apply stress-zz @constantV table '200' range position-z -10.0
+zone dynamic free-field on
+
+struct shell property density 2550 thickness 0.3 isotropic 20E9 0.2 range id 10 ; top slab of ticket Hall Yong's M 20E9
+struct shell property density 2550 thickness 0.3 isotropic 20E9 0.2 range id 11 ; middle slab of ticket Hall
+struct shell property density 2550 thickness 0.3 isotropic 20E9 0.2 range id 12 ; side slab of ticket Hall
+struct shell property density 2550 thickness 0.3 isotropic 20E9 0.2 range id 13 ; bottom slab of ticket Hall
+
+;struct shell property density 2550 thickness 0.3 isotropic 20E9 0.2 range id 20 ; slurry wall shaft thickness (800mm), Young's modulus is approximated as the property of concrete only
+;struct shell property density 2550 thickness 0.3 isotropic 20E9 0.2 range id 30 ; concourseVault lining thickness (800mm), Young's modulus is approximated as the property of concrete only
+;struct shell property density 2550 thickness 0.3 isotropic 20E9 0.2 range id 70 ; mainPlatform lining thickness (800mm), Young's modulus is approximated as the property of concrete only
+
+;struct shell property density 2550 thickness 0.3 isotropic 20E9 0.2 range id 40 ; mainPlatform lining thickness (800mm), Young's modulus is approximated as the property of concrete only
+;struct shell property density 2550 thickness 0.3 isotropic 20E9 0.2 range id 50 ; mainPlatform lining thickness (800mm), Young's modulus is approximated as the property of concrete only
+;struct shell property density 2550 thickness 0.3 isotropic 20E9 0.2 range id 60 ; mainPlatform lining thickness (800mm), Young's modulus is approximated as the property of concrete only
+
+
+;--- add history points
+step 1
+@hist_skip
+history interval @skip_n
+
+model history name 'time' dynamic time-total
+zone history name 'freeFieldAcc-x' acceleration-x position (13.5171,85.056,75.3)
+zone history name 'freeFieldAcc-y' acceleration-y position (13.5171,85.056,75.3)
+zone history name 'freeFieldAcc-z' acceleration-z position (13.5171,85.056,75.3)
+
+zone history name 'ticketHallMidSoilAcc-x' acceleration-x position (32.1248,115.361,63.5755) ; ticket hall - soil
+zone history name 'ticketHallMidSoilAcc-y' acceleration-y position (32.1248,115.361,63.5755) ; ticket hall - soil
+zone history name 'ticketHallMidSoilAcc-z' acceleration-z position (32.1248,115.361,63.5755) ; ticket hall - soil
+structure node history name 'ticketHallMidSlabVel-x' velocity-x position (32.0112,122.404,62.2294) ;  ticket hall - side wall 
+structure node history name 'ticketHallMidSlabVel-y' velocity-y position (32.0112,122.404,62.2294) ;  ticket hall - side wall 
+structure node history name 'ticketHallMidSlabVel-z' velocity-z position (32.0112,122.404,62.2294) ;  ticket hall - side wall 
+
+zone history name 'upperShaftSoilAcc-x' acceleration-x position (30.7091,126.93,47.7491) ; Upper Shaft Soil
+zone history name 'upperShaftSoilAcc-y' acceleration-y position (30.7091,126.93,47.7491) ; Upper Shaft Soil
+zone history name 'upperShaftSoilAcc-z' acceleration-z position (30.7091,126.93,47.7491) ; Upper Shaft Soil
+;structure node history name 'upperShaftWallVel-x' velocity-x position (37.9759,128.141,47.5524) ; Upper Shaft Node
+;structure node history name 'upperShaftWallVel-y' velocity-y position (37.9759,128.141,47.5524) ; Upper Shaft Node
+;structure node history name 'upperShaftWallVel-z' velocity-z position (37.9759,128.141,47.5524) ; Upper Shaft Node
+
+zone history name 'centerShaftSoilAcc-x' acceleration-x position (29.9397,122.81,38.2048) ; Center Shaft Soil
+zone history name 'centerShaftSoilAcc-y' acceleration-y position (29.9397,122.81,38.2048) ; Center Shaft Soil
+zone history name 'centerShaftSoilAcc-z' acceleration-z position (29.9397,122.81,38.2048) ; Center Shaft Soil
+;structure node history name 'centerShaftWallVel-x' velocity-x position (35.1581,128.265,37.9941) ; Center Shaft Node
+;structure node history name 'centerShaftWallVel-y' velocity-y position (35.1581,128.265,37.9941) ; Center Shaft Node
+;structure node history name 'centerShaftWallVel-z' velocity-z position (35.1581,128.265,37.9941) ; Center Shaft Node
+
+zone history name 'lowerShaftSoilAcc-x' acceleration-x position (30.0199,126.778,18.8831) ; Lower Shaft Soil
+zone history name 'lowerShaftSoilAcc-y' acceleration-y position (30.0199,126.778,18.8831) ; Lower Shaft Soil
+zone history name 'lowerShaftSoilAcc-z' acceleration-z position (30.0199,126.778,18.8831) ; Lower Shaft Soil
+;structure node history name 'lowerShaftWallVel-x' velocity-x position (34.9975,128.28,19.1313) ; Lower Shaft Node
+;structure node history name 'lowerShaftWallVel-y' velocity-y position (34.9975,128.28,19.1313) ; Lower Shaft Node
+;structure node history name 'lowerShaftWallVel-z' velocity-z position (34.9975,128.28,19.1313) ; Lower Shaft Node
+
+;structure node history name 'mainPlatformWallVel-x' velocity-x position (12.4051,147.911,4.88436) ; mainPlatFormTunnel Node
+;structure node history name 'mainPlatformWallVel-y' velocity-y position (12.4051,147.911,4.88436) ; mainPlatFormTunnel Node
+;structure node history name 'mainPlatformWallVel-z' velocity-z position (12.4051,147.911,4.88436) ; mainPlatFormTunnel Node
+
+structure shell history name 'ticketHallCeilMoment' moment position (51.1414,146.939,69.9969) ; 'ticketHallCeil'
+structure shell history name 'ticketHallWallMoment' moment position (54.2419,143.429,66.4014) ; 'ticketHallWall'
+;structure shell history name 'mainPlatFormCeilMoment' moment position (10.4858,130.659,11.5866) ; 'mainPlatFormCeilMoment'
+;structure shell history name 'upperShaftWallMoment' moment position (37.9759,128.141,47.5524) ; Upper Shaft Node
+;structure shell history name 'centerShaftWallMoment' moment position (35.1581,128.265,37.9941) ; Center Shaft Node
+;structure shell history name 'lowerShaftWallMoment' moment position (34.9975,128.28,19.1313) ; Lower Shaft Node
+
+structure shell history name 'ticketHallCeilPrincipalMax' stress-maximum depth-factor 1.0 position (51.1414,146.939,69.9969) ; 'ticketHallCeil'
+structure shell history name 'ticketHallCeilPrincipalMin' stress-minimum depth-factor 1.0 position (51.1414,146.939,69.9969) ; 'ticketHallCeil'
+structure shell history name 'ticketHallWallPrincipalMax' stress-maximum depth-factor 1.0 position (54.2419,143.429,66.4014) ; 
+structure shell history name 'ticketHallWallPrincipalMin' stress-minimum depth-factor 1.0 position (54.2419,143.429,66.4014) ; 
+;structure shell history name 'mainPlatFormCeilPrincipalMax' stress-maximum depth-factor 1.0 position (10.4858,130.659,11.5866) ; 'mainPlatFormCeilMoment'
+;structure shell history name 'mainPlatFormCeilPrincipalMin' stress-minimum depth-factor 1.0 position (10.4858,130.659,11.5866) ; 'mainPlatFormCeilMoment'
+;structure shell history name 'upperShaftWallPrincipalMax' stress-maximum depth-factor 1.0 position (37.9759,128.141,47.5524) ; Upper Shaft Node
+;structure shell history name 'upperShaftWallPrincipalMin' stress-minimum depth-factor 1.0 position (37.9759,128.141,47.5524) ; Upper Shaft Node
+;structure shell history name 'centerShaftWallPrincipalMax' stress-maximum depth-factor 1.0 position (35.1581,128.265,37.9941) ; Center Shaft Node
+;structure shell history name 'centerShaftWallPrincipalMin' stress-minimum depth-factor 1.0 position (35.1581,128.265,37.9941) ; Center Shaft Node
+;structure shell history name 'lowerShaftWallPrincipalMax' stress-maximum depth-factor 1.0 position (34.9975,128.28,19.1313) ; Lower Shaft Node
+;structure shell history name 'lowerShaftWallPrincipalMin' stress-minimum depth-factor 1.0 position (34.9975,128.28,19.1313) ; Lower Shaft Node
+
+structure beam  history name 'column1-1 axial force' force-x position (42.0573,144.873,68.0498)
+structure beam  history name 'column1-2 axial force' force-x position (42.0571,144.873,64.1667)
+structure beam  history name 'column1-3 axial force' force-x position (42.0569,144.872,60.2837)
+structure beam  history name 'column1-4 axial force' force-x position (42.0567,144.872,56.4008)
+
+structure beam  history name 'column1-1 moment' moment position (42.0573,144.873,68.0498)
+structure beam  history name 'column1-2 moment' moment position (42.0571,144.873,64.1667)
+structure beam  history name 'column1-3 moment' moment position (42.0569,144.872,60.2837)
+structure beam  history name 'column1-4 moment' moment position (42.0567,144.872,56.4008)
+
+;;
+;structure beam  history name 'elevatorShaft-1 axial force' force-x position (36.3735,137.309,68.0393)
+;structure beam  history name 'elevatorShaft-2 axial force' force-x position (36.3735,137.309,64.1554)
+;structure beam  history name 'elevatorShaft-3 axial force' force-x position (36.3744,137.309,48.2356)
+;structure beam  history name 'elevatorShaft-4 axial force' force-x position (36.3741,137.309,20.2795)
+
+;structure beam  history name 'elevatorShaft-1 moment' moment position (36.3735,137.309,68.0393)
+;structure beam  history name 'elevatorShaft-2 moment' moment position (36.3735,137.309,64.1554)
+;structure beam  history name 'elevatorShaft-3 moment' moment position (36.3744,137.309,48.2356)
+;structure beam  history name 'elevatorShaft-4 moment' moment position (36.3741,137.309,20.2795)
+
+
+model save '[4_N]DynamicPrep3D_T.sav'
+
